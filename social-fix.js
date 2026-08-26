@@ -1,32 +1,51 @@
+/* DinoRamtix social interactions for feed, profile posts, reels and stories */
 (function(){
-function start(){
   const $=id=>document.getElementById(id);
-  document.addEventListener('click',function(e){
-    const media=e.target.closest('#feedList .media');
-    if(media){
-      const btn=media.closest('article')?.querySelector('button[onclick*="like("]');
-      const m=btn?.getAttribute('onclick')?.match(/like\('([^']+)'/);
-      if(m&&window.renderPostModal){e.preventDefault();e.stopPropagation();window.renderPostModal(m[1]);}
-    }
-  },true);
-  let busy=false;
-  const refresh=()=>{
-    if(busy||!window.renderReels)return;
-    const box=$('reelList');
-    if(box && !$('reels')?.classList.contains('hidden') && (!box.querySelector('.reelCard') || box.dataset.enhanced!=='1')){
-      busy=true;box.dataset.enhanced='1';window.renderReels().finally(()=>{busy=false});
-    }
-  };
-  const obs=new MutationObserver(()=>setTimeout(refresh,100));
-  if(document.body)obs.observe(document.body,{childList:true,subtree:true});
-  setInterval(refresh,1200);setTimeout(refresh,600);
-  document.addEventListener('click',e=>{
-    const story=e.target.closest('.storyItem');
-    if(story && window.renderStoryViewer){
-      const onclick=story.getAttribute('onclick')||'';const m=onclick.match(/(?:openStory|renderStoryViewer)\('([^']+)'\)/);
-      if(m){e.preventDefault();e.stopPropagation();window.renderStoryViewer(m[1]);}
-    }
-  },true);
-}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+  async function profileUserId(){
+    const box=$('profileBox'); if(!box)return null;
+    const follow=[...box.querySelectorAll('button')].find(b=>/seguir|siguiendo/i.test(b.textContent||''));
+    const m=(follow?.getAttribute('onclick')||'').match(/toggleFollow\(['\"]([^'\"]+)/);
+    if(m)return m[1];
+    const p=box.querySelector('[data-user-id]'); if(p)return p.dataset.userId;
+    return null;
+  }
+  async function bindProfilePosts(){
+    const box=$('profileBox'); if(!box)return;
+    const uid=await profileUserId(); if(!uid)return;
+    const db=window.db||window.supabase?.createClient?.(window.DINORAMTIX_CONFIG?.supabaseUrl,window.DINORAMTIX_CONFIG?.supabasePublishableKey);
+    if(!db)return;
+    const r=await db.from('posts').select('id,user_id,media_url,media_type').eq('user_id',uid).order('created_at',{ascending:false});
+    if(r.error)return;
+    const byUrl=new Map((r.data||[]).map(p=>[p.media_url,p.id]));
+    box.querySelectorAll('img,video').forEach(media=>{
+      if(media.closest('.avatar,.profileAvatar,.storyItem'))return;
+      const src=media.currentSrc||media.src||media.getAttribute('src');
+      const id=byUrl.get(src);
+      if(!id)return;
+      media.dataset.postId=id;
+      media.style.cursor='pointer';
+      media.title='Abrir publicación';
+      if(!media.dataset.socialBound){
+        media.dataset.socialBound='1';
+        media.addEventListener('click',e=>{
+          e.preventDefault();e.stopPropagation();
+          if(window.renderPostModal)window.renderPostModal(media.dataset.postId);
+        },true);
+      }
+      const card=media.closest('article,.post,.card,div');
+      if(card && !card.dataset.postInteractive){
+        card.dataset.postInteractive='1';
+        card.style.cursor='pointer';
+      }
+    });
+  }
+  function start(){
+    const run=()=>setTimeout(bindProfilePosts,100);
+    document.addEventListener('click',e=>{
+      if(e.target.closest('#profileBox'))run();
+    },true);
+    new MutationObserver(run).observe(document.body,{childList:true,subtree:true});
+    run();
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 })();
