@@ -11,19 +11,20 @@ function start(){
   },true);
   let busy=false;
   const refresh=()=>{
-    if(busy)return;
-    if($('reelList')&&$('reelList').children.length && window.renderReels && !$('reelList').dataset.enhanced){
-      busy=true;$('reelList').dataset.enhanced='1';window.renderReels().finally(()=>{busy=false});
+    if(busy||!window.renderReels)return;
+    const box=$('reelList');
+    if(box && !$('reels')?.classList.contains('hidden') && (!box.querySelector('.reelCard') || box.dataset.enhanced!=='1')){
+      busy=true;box.dataset.enhanced='1';window.renderReels().finally(()=>{busy=false});
     }
   };
-  const obs=new MutationObserver(()=>setTimeout(refresh,80));
+  const obs=new MutationObserver(()=>setTimeout(refresh,100));
   if(document.body)obs.observe(document.body,{childList:true,subtree:true});
-  setTimeout(refresh,500);
+  setInterval(refresh,1200);setTimeout(refresh,600);
   document.addEventListener('click',e=>{
     const story=e.target.closest('.storyItem');
     if(story && window.renderStoryViewer){
       const onclick=story.getAttribute('onclick')||'';const m=onclick.match(/(?:openStory|renderStoryViewer)\('([^']+)'\)/);
-      if(m){e.preventDefault();window.renderStoryViewer(m[1]);}
+      if(m){e.preventDefault();e.stopPropagation();window.renderStoryViewer(m[1]);}
     }
   },true);
 }
