@@ -1,38 +1,39 @@
-// DinoRamtix PWA install button
+// DinoRamtix PWA install button + Mini Games + Coins + Chat unread badge
 (() => {
   let deferredPrompt = null;
+  const DB = () => window.supabase?.createClient?.(DINORAMTIX_CONFIG.supabaseUrl, DINORAMTIX_CONFIG.supabasePublishableKey);
+  const esc = x => String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 
-  window.addEventListener('beforeinstallprompt', (event) => {
-    event.preventDefault();
-    deferredPrompt = event;
-    showInstallButton();
-  });
-
-  window.addEventListener('appinstalled', () => {
-    deferredPrompt = null;
-    const button = document.getElementById('installAppButton');
-    if (button) button.remove();
-  });
+  window.addEventListener('beforeinstallprompt', (event) => { event.preventDefault(); deferredPrompt = event; showInstallButton(); });
+  window.addEventListener('appinstalled', () => { deferredPrompt = null; document.getElementById('installAppButton')?.remove(); });
 
   function showInstallButton() {
     if (document.getElementById('installAppButton') || window.matchMedia('(display-mode: standalone)').matches) return;
-    const button = document.createElement('button');
-    button.id = 'installAppButton';
-    button.type = 'button';
-    button.textContent = '📱 Instalar DinoRamtix';
-    button.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:9999;border:0;border-radius:999px;padding:13px 18px;font-weight:700;font-size:15px;cursor:pointer;box-shadow:0 6px 22px rgba(0,0,0,.25);background:#0095f6;color:#fff;';
-    button.addEventListener('click', async () => {
-      if (!deferredPrompt) {
-        alert('Para instalar DinoRamtix, abre el menú del navegador y elige “Instalar aplicación” o “Añadir a pantalla de inicio”.');
-        return;
-      }
-      deferredPrompt.prompt();
-      await deferredPrompt.userChoice;
-      deferredPrompt = null;
-      button.remove();
-    });
+    const button = document.createElement('button'); button.id='installAppButton'; button.type='button'; button.textContent='📱 Instalar DinoRamtix';
+    button.style.cssText='position:fixed;right:18px;bottom:18px;z-index:9999;border:0;border-radius:999px;padding:13px 18px;font-weight:700;font-size:15px;cursor:pointer;box-shadow:0 6px 22px rgba(0,0,0,.25);background:#0095f6;color:#fff;';
+    button.addEventListener('click',async()=>{if(!deferredPrompt){alert('Para instalar DinoRamtix, abre el menú del navegador y elige “Instalar aplicación” o “Añadir a pantalla de inicio”.');return;}deferredPrompt.prompt();await deferredPrompt.userChoice;deferredPrompt=null;button.remove();});
     document.body.appendChild(button);
   }
 
-  document.addEventListener('DOMContentLoaded', showInstallButton);
+  function injectGamesUI(){
+    if(document.getElementById('dinoGamesStyle'))return;
+    const st=document.createElement('style');st.id='dinoGamesStyle';st.textContent=`#dinoGamesModal{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:10000;display:flex;align-items:center;justify-content:center;padding:14px}#dinoGamesSheet{width:min(720px,96vw);max-height:94vh;overflow:auto;background:#fff;border-radius:22px;padding:20px}.gameCards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.gameCard{border:1px solid #ddd;border-radius:16px;padding:16px;text-align:center;cursor:pointer;background:#f8fafc}.gameCard:hover{transform:translateY(-2px)}.gameArena{border:1px solid #ddd;border-radius:18px;padding:20px;text-align:center;min-height:300px}.gameBig{font-size:44px;font-weight:800;margin:22px 0}.gameTap{width:180px;height:180px;border-radius:50%;font-size:34px;font-weight:800}.coinPill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:7px 12px;background:#fff4c2;border:1px solid #f0d56a;font-weight:700}.chatUnreadBadge{position:absolute;right:-5px;top:-7px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#e31b23;color:#fff;font:bold 12px Arial;display:grid;place-items:center;border:2px solid #fff;line-height:1}.chatBadgeHost{position:relative!important;display:inline-flex!important;align-items:center}@media(max-width:600px){.gameCards{grid-template-columns:1fr}.gameArena{min-height:280px}}`;document.head.appendChild(st);
+    const m=document.createElement('div');m.id='dinoGamesModal';m.style.display='none';m.innerHTML='<div id="dinoGamesSheet"></div>';document.body.appendChild(m);m.addEventListener('click',e=>{if(e.target===m)closeGames()});
+  }
+  function closeGames(){document.getElementById('dinoGamesModal')?.style.setProperty('display','none')} window.closeDinoGames=closeGames;
+  async function currentUser(){const d=DB();if(!d)return null;return(await d.auth.getSession()).data.session?.user||null}
+  async function getCoins(){const d=DB(),u=await currentUser();if(!d||!u)return 0;const r=await d.from('profiles').select('coins,verified,username').eq('id',u.id).maybeSingle();return r.data?.coins||0}
+  async function updateCoinPill(){const el=document.getElementById('gameCoins');if(!el)return;el.textContent=`🪙 ${Number(await getCoins()).toLocaleString('es-CO')}`}
+  async function award(game,score){const d=DB(),u=await currentUser();if(!d||!u)return alert('Inicia sesión para ganar monedas.');const r=await d.rpc('add_game_coins',{p_game:game,p_score:Math.max(0,Math.floor(score))});if(r.error)return alert(r.error.message);await updateCoinPill();return r.data||0}
+  async function buyVerified(){const d=DB(),u=await currentUser();if(!d||!u)return alert('Inicia sesión primero.');const coins=await getCoins();if(coins<7000000)return alert(`Necesitas 7.000.000 🪙. Tienes ${coins.toLocaleString('es-CO')}.`);if(!confirm('Comprar el verificado por 7.000.000 🪙?'))return;const r=await d.rpc('buy_verified_with_coins');if(r.error)return alert(r.error.message);alert('¡Listo! Tu cuenta ahora está verificada 🟦✓');await updateCoinPill();if(window.my)window.my()}
+  function gameMenu(){injectGamesUI();const s=document.getElementById('dinoGamesSheet');s.innerHTML=`<button class="g" onclick="closeDinoGames()">✕ Cerrar</button><div class="row" style="margin:8px 0"><div class="grow"><h2 style="margin:0">🎮 Mini juegos</h2><p class="muted" style="margin:5px 0">Sin límite de tiempo. Tu puntuación se convierte en la misma cantidad de monedas.</p></div><span id="gameCoins" class="coinPill">🪙 Cargando...</span></div><div class="gameCards"><button class="gameCard" onclick="dinoTapGame()"><div style="font-size:44px">🦖</div><b>Dino Tap</b><div class="muted small">Toca y consigue puntos</div></button><button class="gameCard" onclick="dinoMathGame()"><div style="font-size:44px">🧠</div><b>Reto Matemático</b><div class="muted small">Resuelve operaciones</div></button><button class="gameCard" onclick="dinoTargetGame()"><div style="font-size:44px">🎯</div><b>Caza el objetivo</b><div class="muted small">Encuentra el objetivo</div></button></div><div class="card" style="margin-top:14px"><b>🟦 Verificado</b><p class="muted">Compra la insignia por 7.000.000 monedas, sin necesidad de 10.000 seguidores.</p><button class="p" onclick="buyDinoVerified()">Comprar por 7.000.000 🪙</button></div>`;document.getElementById('dinoGamesModal').style.display='flex';updateCoinPill()}
+  window.openDinoGames=gameMenu;window.buyDinoVerified=buyVerified;
+  window.dinoTapGame=function(){injectGamesUI();const s=document.getElementById('dinoGamesSheet');s.innerHTML=`<button class="g" onclick="openDinoGames()">← Juegos</button><div class="gameArena"><h2>🦖 Dino Tap</h2><p class="muted">Sin cronómetro. Toca todo lo que quieras.</p><div id="tapScore" class="gameBig">0</div><button class="p gameTap" onclick="window.__tapScore++;document.getElementById('tapScore').textContent=window.__tapScore">🦖</button><div class="actions" style="justify-content:center"><button class="p" onclick="finishDinoGame('Dino Tap',window.__tapScore||0)">Cobrar 🪙</button><button class="g" onclick="window.__tapScore=0;document.getElementById('tapScore').textContent='0'">Reiniciar</button></div></div>`;window.__tapScore=0;document.getElementById('dinoGamesModal').style.display='flex'};
+  window.dinoMathGame=function(){function next(){const a=Math.floor(Math.random()*20)+1,b=Math.floor(Math.random()*20)+1,op=Math.random()<.5?'+':'-',ans=op==='+'?a+b:a-b;window.__mathAns=ans;document.getElementById('mathQ').textContent=`${a} ${op} ${b} = ?`;document.getElementById('mathInput').value='';document.getElementById('mathInfo').textContent=`Puntos: ${window.__mathScore||0}`};injectGamesUI();const s=document.getElementById('dinoGamesSheet');s.innerHTML=`<button class="g" onclick="openDinoGames()">← Juegos</button><div class="gameArena"><h2>🧠 Reto Matemático</h2><p id="mathQ" class="gameBig">...</p><input id="mathInput" type="number" placeholder="Respuesta" style="max-width:260px;margin:auto"><p id="mathInfo" class="muted">Puntos: 0</p><div class="actions" style="justify-content:center"><button class="p" onclick="if(Number(document.getElementById('mathInput').value)===window.__mathAns){window.__mathScore++;document.getElementById('mathInfo').textContent='¡Correcto! Puntos: '+window.__mathScore;setTimeout(window.__nextMath,250)}else document.getElementById('mathInfo').textContent='Incorrecto. Intenta otra vez.'">Comprobar</button><button class="g" onclick="finishDinoGame('Reto Matemático',window.__mathScore||0)">Cobrar 🪙</button></div></div>`;window.__mathScore=0;window.__nextMath=next;next();document.getElementById('dinoGamesModal').style.display='flex'};
+  window.dinoTargetGame=function(){injectGamesUI();const s=document.getElementById('dinoGamesSheet');s.innerHTML=`<button class="g" onclick="openDinoGames()">← Juegos</button><div class="gameArena"><h2>🎯 Caza el objetivo</h2><p class="muted">Cada acierto suma 1 punto. Sin cronómetro.</p><div id="targetArea" style="height:300px;position:relative;border:1px dashed #bbb;border-radius:14px;background:#f7f7f7"><button id="targetBtn" style="position:absolute;border-radius:50%;font-size:24px" onclick="window.__targetScore++;document.getElementById('targetScore').textContent=window.__targetScore;moveTarget()">🎯</button></div><div id="targetScore" class="gameBig">0</div><button class="p" onclick="finishDinoGame('Caza el objetivo',window.__targetScore||0)">Cobrar 🪙</button></div>`;window.__targetScore=0;window.moveTarget=()=>{const a=document.getElementById('targetArea'),b=document.getElementById('targetBtn');if(!a||!b)return;b.style.left=Math.random()*Math.max(0,a.clientWidth-55)+'px';b.style.top=Math.random()*Math.max(0,a.clientHeight-55)+'px'};window.moveTarget();document.getElementById('dinoGamesModal').style.display='flex'};
+  window.finishDinoGame=async function(game,score){score=Math.max(0,Math.floor(score||0));if(!score)return alert('Consigue al menos 1 punto.');const earned=await award(game,score);if(earned!=null){alert(`¡Ganaste ${Number(earned).toLocaleString('es-CO')} 🪙!`);openDinoGames()}};
+  function addGamesButton(){if(document.getElementById('dinoGamesNav'))return;const reels=[...document.querySelectorAll('button')].find(b=>/Reels/i.test(b.textContent||''));if(!reels)return;const b=document.createElement('button');b.id='dinoGamesNav';b.className='g';b.textContent='🎮 Mini juegos';b.onclick=gameMenu;reels.parentNode.insertBefore(b,reels.nextSibling)}
+  async function updateChatBadge(){const d=DB(),u=await currentUser();if(!d||!u)return;const r=await d.from('messages').select('id',{count:'exact',head:true}).eq('receiver_id',u.id).is('read_at',null),count=r.count||0;[...document.querySelectorAll('button,a')].filter(x=>/chat|💬/i.test(x.textContent||'')).forEach(el=>{if(el.id==='dinoGamesNav')return;el.classList.add('chatBadgeHost');let badge=el.querySelector('.chatUnreadBadge');if(count){if(!badge){badge=document.createElement('span');badge.className='chatUnreadBadge';el.appendChild(badge)}badge.textContent=count>99?'99+':String(count)}else if(badge)badge.remove()})}
+  function boot(){showInstallButton();injectGamesUI();addGamesButton();updateChatBadge();setInterval(()=>{addGamesButton();updateChatBadge();updateCoinPill()},8000);new MutationObserver(()=>{addGamesButton();updateChatBadge()}).observe(document.body,{childList:true,subtree:true})}
+  document.addEventListener('DOMContentLoaded',boot);
 })();
