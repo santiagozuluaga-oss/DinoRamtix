@@ -1,0 +1,10 @@
+{
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Link", "value": "</dinoramtix-icon.svg>; rel=\"icon\", </manifest.json>; rel=\"manifest\"" }
+      ]
+    }
+  ]
+}
