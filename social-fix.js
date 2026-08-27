@@ -57,3 +57,43 @@
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 })();
+
+/* DinoRamtix visible PWA install button */
+(function(){
+  let deferredPrompt=null;
+  const standalone=()=>window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
+  function addStyles(){
+    if(document.getElementById('dinoInstallStyles'))return;
+    const s=document.createElement('style');
+    s.id='dinoInstallStyles';
+    s.textContent='#dinoInstallButton{position:fixed;right:18px;bottom:18px;z-index:99999;display:flex;align-items:center;gap:10px;border:0;border-radius:18px;padding:10px 15px 10px 10px;background:#fff;color:#111;font-weight:800;font-size:15px;box-shadow:0 8px 28px rgba(0,0,0,.22);cursor:pointer}#dinoInstallButton img{width:38px;height:38px;border-radius:12px;object-fit:cover;image-rendering:auto}#dinoInstallButton small{display:block;font-size:11px;font-weight:400;color:#666;margin-top:2px}@media(max-width:600px){#dinoInstallButton{right:12px;bottom:12px;padding-right:12px}}';
+    document.head.appendChild(s);
+  }
+  function showButton(){
+    if(standalone())return;
+    addStyles();
+    let b=document.getElementById('dinoInstallButton');
+    if(b)return;
+    b=document.createElement('button');
+    b.id='dinoInstallButton';
+    b.type='button';
+    b.setAttribute('aria-label','Instalar aplicación DinoRamtix');
+    b.innerHTML='<img src="/dinoramtix-icon.svg" alt="Icono de DinoRamtix"><span>📲 Instalar DinoRamtix<small>Usar como aplicación</small></span>';
+    b.addEventListener('click',installApp);
+    document.body.appendChild(b);
+  }
+  async function installApp(){
+    if(deferredPrompt){
+      deferredPrompt.prompt();
+      try{await deferredPrompt.userChoice}catch(e){}
+      deferredPrompt=null;
+      return;
+    }
+    const isiOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+    if(isiOS){alert('En iPhone o iPad: pulsa Compartir y luego “Añadir a pantalla de inicio”.');}
+    else{alert('Si no aparece la ventana de instalación, abre el menú ⋮ del navegador y pulsa “Instalar aplicación” o “Añadir a pantalla de inicio”.');}
+  }
+  window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;showButton()});
+  window.addEventListener('appinstalled',()=>{deferredPrompt=null;document.getElementById('dinoInstallButton')?.remove()});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',showButton);else showButton();
+})();
