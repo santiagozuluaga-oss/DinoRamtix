@@ -42,18 +42,29 @@
   function modal(id,html){addStyles();let m=$(id);if(!m){m=document.createElement('div');m.id=id;m.className='dinoModal';document.body.appendChild(m)}m.innerHTML=`<div class="dinoSheet">${html}</div>`;m.classList.remove('hidden');m.onclick=e=>{if(e.target===m)m.classList.add('hidden')}}
   function closeModal(id){$(id)?.classList.add('hidden')}
 
+  function fastNotice(message){
+    let n=$('dinoFastNotice');
+    if(!n){
+      n=document.createElement('div'); n.id='dinoFastNotice';
+      n.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:100000;background:#111;color:#fff;padding:13px 18px;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.3);font-weight:700;text-align:center;max-width:min(90vw,520px);transition:opacity .18s ease';
+      document.body.appendChild(n);
+    }
+    n.textContent=message; n.style.opacity='1'; clearTimeout(window.__dinoNoticeTimer);
+    window.__dinoNoticeTimer=setTimeout(()=>{n.style.opacity='0'},2600);
+  }
+
   async function buyVerified() {
     const u = await currentUser();
-    if (!u) return alert('Inicia sesión para comprar el verificado.');
+    if (!u) return fastNotice('Inicia sesión para comprar el verificado.');
     const r = await db.from('profiles').select('coins,verified').eq('id', u.id).maybeSingle();
     const coins = Number(r.data?.coins || 0);
-    if (r.data?.verified) return alert('Tu cuenta ya está verificada 🟦✓');
-    if (coins < 7000000) return alert(`Necesitas 7.000.000 🪙. Tienes ${coins.toLocaleString('es-CO')} 🪙.`);
+    if (r.data?.verified) return fastNotice('Tu cuenta ya está verificada 🟦✓');
+    if (coins < 7000000) return fastNotice(`Necesitas 7.000.000 🪙. Tienes ${coins.toLocaleString('es-CO')} 🪙.`);
     if (!confirm('¿Comprar la insignia de verificado por 7.000.000 🪙?')) return;
     const q = await db.rpc('buy_verified_with_coins');
-    if (q.error) return alert(q.error.message);
-    await refreshCoins();
-    alert('¡Listo! Tu cuenta ahora está verificada 🟦✓');
+    if (q.error) return fastNotice(q.error.message);
+    fastNotice('¡Listo! Tu cuenta ahora está verificada 🟦✓');
+    refreshCoins();
     if (typeof window.my === 'function') window.my();
   }
 
@@ -71,13 +82,15 @@
   }
   async function finishGame(game){
     if(!gameRunning)return;gameRunning=false;clearInterval(gameTimer);gameTimer=null;
-    const u=await currentUser();if(!u){alert('Inicia sesión para guardar las monedas.');return}
+    const u=await currentUser();if(!u){fastNotice('Inicia sesión para guardar las monedas.');return}
     const score=Math.max(0,Math.floor(gameScore));
     const r=await db.rpc('add_game_coins',{p_game:game,p_score:score});
-    if(r.error){alert(r.error.message);return}
-    await refreshCoins();
-    alert(`¡Partida terminada!\nPuntuación: ${score}\n🪙 Ganaste ${Number(r.data||score).toLocaleString('es-CO')} monedas.`);
-    gameMenu();
+    if(r.error){fastNotice(r.error.message);return}
+    const earned=Number(r.data||score);
+    // Mostrar la confirmación sin esperar otra consulta de Supabase.
+    fastNotice(`🎉 ¡Partida terminada! +${earned.toLocaleString('es-CO')} 🪙 monedas`);
+    refreshCoins();
+    setTimeout(gameMenu,120);
   }
   function setScore(n){gameScore=n;const el=$('gameScore');if(el)el.textContent=`${n} puntos`}
   function stopDinoGame(){gameRunning=false;clearInterval(gameTimer);gameTimer=null;closeModal('dinoGameModal');gameMenu()}
@@ -91,7 +104,6 @@
   function moveTarget(){const area=$('targetArea'),t=$('targetButton');if(!area||!t)return;const maxX=Math.max(0,area.clientWidth-70),maxY=Math.max(0,area.clientHeight-70);t.style.left=Math.floor(Math.random()*maxX)+'px';t.style.top=Math.floor(Math.random()*maxY)+'px'}
   function startTargetGame(){gameShell('🎯 Caza el objetivo',`<div id="targetArea" class="dinoPlay"><button id="targetButton" class="dinoTarget p" onclick="window.hitTarget()">🎯</button><button class="g" onclick="window.finishTargetGame()">Terminar y cobrar 🪙</button></div>`);moveTarget()}
   function hitTarget(){if(!gameRunning)return;setScore(gameScore+10);moveTarget()}
-  function finishTargetGame(){finishGame('caza_objetivo')}
 
   function profileIdFromBox(box){
     if(!box)return null;
@@ -101,12 +113,12 @@
     return null;
   }
   async function showFollowList(uid,type){
-    if(!uid)return alert('No se pudo identificar este perfil.');
+    if(!uid)return fastNotice('No se pudo identificar este perfil.');
     const col=type==='followers'?'follower_id':'following_id';
     const rel=type==='followers'?'profiles!follows_follower_id_fkey':'profiles!follows_following_id_fkey';
     const title=type==='followers'?'👥 Seguidores':'➡️ Siguiendo';
     const r=await db.from('follows').select(`${col}, ${rel}(id,username,avatar_url,verified)`).eq(type==='followers'?'following_id':'follower_id',uid).order('created_at',{ascending:false});
-    if(r.error)return alert(r.error.message);
+    if(r.error)return fastNotice(r.error.message);
     const users=(r.data||[]).map(x=>x[rel]);
     const unique=[];const seen=new Set();for(const u of users){if(u&&!seen.has(u.id)){seen.add(u.id);unique.push(u)}}
     const rows=unique.map(u=>`<div class="dinoUser"><div>${u.avatar_url?`<img src="${esc(u.avatar_url)}">`:`<div class="dinoUserAvatar">${esc((u.username||'?')[0].toUpperCase())}</div>`}</div><div class="grow"><b>@${esc(u.username||'Usuario')}</b>${u.verified?' 🟦✓':''}</div><button class="p" onclick="window.profile('${u.id}');window.closeFollowList()">Ver perfil</button></div>`).join('');
@@ -129,7 +141,7 @@
     refreshCoins();wireFollowCounters();
   }
 
-  window.openDinoGames=gameMenu;window.closeDinoGames=()=>closeModal('dinoGamesModal');window.startDinoTap=startDinoTap;window.tapDino=tapDino;window.finishDinoTap=finishDinoTap;window.startMathGame=startMathGame;window.checkMath=checkMath;window.finishMathGame=finishMathGame;window.startTargetGame=startTargetGame;window.hitTarget=hitTarget;window.finishTargetGame=finishTargetGame;window.finishDinoGame=finishGame;window.stopDinoGame=stopDinoGame;window.buyDinoVerified=buyVerified;window.closeFollowList=closeFollowList;window.showDinoFollowList=showFollowList;
+  window.openDinoGames=gameMenu;window.closeDinoGames=()=>closeModal('dinoGamesModal');window.startDinoTap=startDinoTap;window.tapDino=tapDino;window.finishDinoTap=finishDinoTap;window.startMathGame=startMathGame;window.checkMath=checkMath;window.finishMathGame=finishMathGame;window.startTargetGame=startTargetGame;window.hitTarget=hitTarget;window.finishTargetGame=finishGame;window.stopDinoGame=stopDinoGame;window.buyDinoVerified=buyVerified;window.closeFollowList=closeFollowList;window.showDinoFollowList=showFollowList;
   window.refreshDinoCoins=refreshCoins;
   function boot(){addControls();setInterval(()=>{addControls();wireFollowCounters()},5000);new MutationObserver(()=>{addControls();wireFollowCounters()}).observe(document.body,{childList:true,subtree:true})}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
