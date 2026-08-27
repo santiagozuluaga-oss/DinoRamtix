@@ -44,9 +44,7 @@
     });
   }
   function bindAnyPostMedia(){
-    document.querySelectorAll('#profileBox [data-post-id]').forEach(media=>{
-      media.style.cursor='pointer';
-    });
+    document.querySelectorAll('#profileBox [data-post-id]').forEach(media=>{media.style.cursor='pointer';});
   }
   function start(){
     let timer;
@@ -96,4 +94,47 @@
   window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;showButton()});
   window.addEventListener('appinstalled',()=>{deferredPrompt=null;document.getElementById('dinoInstallButton')?.remove()});
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',showButton);else showButton();
+})();
+
+/* DinoRamtix extra controls: MiniJuegos, Comprar verificado y saldo de monedas */
+(function(){
+  const db=window.supabase?.createClient?.(window.DINORAMTIX_CONFIG?.supabaseUrl,window.DINORAMTIX_CONFIG?.supabasePublishableKey);
+  const $=id=>document.getElementById(id);
+  async function user(){return db?(await db.auth.getSession()).data.session?.user:null}
+  async function refreshCoins(){
+    const pill=$('dinoCoinsPill'),u=await user(); if(!pill)return;
+    if(!u){pill.textContent='🪙 0 monedas';return}
+    const r=await db.from('profiles').select('coins').eq('id',u.id).maybeSingle();
+    const n=Number(r.data?.coins||0);
+    pill.textContent=`🪙 ${n.toLocaleString('es-CO')} ${n===1?'moneda':'monedas'}`;
+  }
+  async function buyVerified(){
+    const u=await user();if(!u)return alert('Inicia sesión para comprar el verificado.');
+    const r=await db.from('profiles').select('coins,verified').eq('id',u.id).maybeSingle();
+    const n=Number(r.data?.coins||0);
+    if(r.data?.verified)return alert('Tu cuenta ya está verificada 🟦✓');
+    if(n<7000000)return alert(`Necesitas 7.000.000 🪙. Tienes ${n.toLocaleString('es-CO')} 🪙.`);
+    if(!confirm('¿Comprar el verificado por 7.000.000 🪙?'))return;
+    const q=await db.rpc('buy_verified_with_coins');
+    if(q.error)return alert(q.error.message);
+    await refreshCoins();alert('¡Listo! Tu cuenta ahora está verificada 🟦✓');
+    if(typeof window.my==='function')window.my();
+  }
+  function addControls(){
+    const tabs=document.querySelector('#app>.tabs');if(!tabs)return;
+    if(!$('dinoGamesTab')){
+      const b=document.createElement('button');b.id='dinoGamesTab';b.className='g';b.textContent='🎮 MiniJuegos';
+      b.onclick=()=>{if(typeof window.openDinoGames==='function')window.openDinoGames();else alert('Los MiniJuegos se están cargando. Recarga la página e inténtalo de nuevo.')};tabs.appendChild(b);
+    }
+    if(!$('dinoVerifiedTab')){
+      const b=document.createElement('button');b.id='dinoVerifiedTab';b.className='g';b.textContent='🟦 Comprar verificado';b.onclick=buyVerified;tabs.appendChild(b);
+    }
+    if(!$('dinoCoinsPill')){
+      const p=document.createElement('span');p.id='dinoCoinsPill';p.className='pill';p.style.cssText='font-weight:700;display:inline-flex;align-items:center;justify-content:center;min-width:130px;';p.textContent='🪙 0 monedas';tabs.appendChild(p);
+    }
+    refreshCoins();
+  }
+  window.refreshDinoCoins=refreshCoins;window.buyDinoVerified=buyVerified;
+  function boot(){addControls();refreshCoins();setInterval(()=>{addControls();refreshCoins()},8000)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
