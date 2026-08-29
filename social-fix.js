@@ -28,13 +28,24 @@
   }
   function findType(el){const t=(el.textContent||'').trim().toLowerCase();return t.includes('seguidores')?'followers':t.includes('siguiendo')?'following':null}
   function isInteractive(el){return !!el?.closest('button,a,input,textarea,select,[role="button"],.follow-btn,.followButton,[onclick*="Follow"],[onclick*="follow"]')}
-  function wireCounters(){['meBox','profileBox'].forEach(id=>{const box=$(id);if(!box)return;const uid=profileId(box);box.querySelectorAll('*').forEach(el=>{if(el.dataset.dinoFollowWired)return;const type=findType(el);if(!type||id==='profileBox'&&!uid)return;el.dataset.dinoFollowWired='1';el.classList.add('dinoCountLink');el.addEventListener('click',async e=>{if(isInteractive(e.target))return;e.preventDefault();e.stopPropagation();const u=id==='meBox'?await current():null;await showFollowListFixed(u?.id||uid,type)},true)})})}
+  function wireFollowButtons(root=document){
+    root.querySelectorAll?.('button,.follow-btn,.followButton,[role="button"]').forEach(btn=>{
+      if(btn.dataset.dinoFollowStop)return;
+      const text=(btn.textContent||'').trim().toLowerCase();
+      const onclick=btn.getAttribute('onclick')||'';
+      if(!/seguir|siguiendo|follow|unfollow/i.test(text+' '+onclick))return;
+      btn.dataset.dinoFollowStop='1';
+      // Let the button's own follow action run first, then prevent profile/card handlers.
+      btn.addEventListener('click',e=>{e.stopPropagation()},false);
+    });
+  }
+  function wireCounters(){['meBox','profileBox'].forEach(id=>{const box=$(id);if(!box)return;const uid=profileId(box);wireFollowButtons(box);box.querySelectorAll('*').forEach(el=>{if(el.dataset.dinoFollowWired)return;const type=findType(el);if(!type||id==='profileBox'&&!uid)return;el.dataset.dinoFollowWired='1';el.classList.add('dinoCountLink');el.addEventListener('click',async e=>{if(isInteractive(e.target))return;e.preventDefault();e.stopPropagation();const u=id==='meBox'?await current():null;await showFollowListFixed(u?.id||uid,type)},false)})})}
   function loadGames(){if(document.getElementById('dinoGamesRuntime'))return;const s=document.createElement('script');s.id='dinoGamesRuntime';s.src='./games-ui.js?v=fix3';s.defer=true;document.head.appendChild(s);s.addEventListener('load',()=>setTimeout(()=>{window.showDinoFollowList=showFollowListFixed;wireCounters()},50))}
   let installPrompt=null;
   window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;window.__dinoInstallPrompt=e;const b=$('dinoInstallButton');if(b)b.style.display='flex'});
   window.addEventListener('appinstalled',()=>{installPrompt=null;window.__dinoInstallPrompt=null;$('dinoInstallButton')?.remove()});
   function installButton(){if(window.matchMedia?.('(display-mode: standalone)').matches||window.navigator.standalone)return;if($('dinoInstallButton'))return;const b=document.createElement('button');b.id='dinoInstallButton';b.type='button';b.innerHTML='<img src="/dinoramtix-icon.svg" style="width:34px;height:34px;border-radius:10px;vertical-align:middle;margin-right:8px">📲 Instalar DinoRamtix';b.style.cssText='position:fixed;right:16px;bottom:16px;z-index:99999;display:flex;align-items:center;border:0;border-radius:16px;padding:9px 13px;background:#fff;color:#111;font-weight:800;box-shadow:0 6px 24px rgba(0,0,0,.2);cursor:pointer';b.onclick=async()=>{if(installPrompt){installPrompt.prompt();try{await installPrompt.userChoice}catch(e){}installPrompt=null;window.__dinoInstallPrompt=null}else alert('Abre el menú ⋮ del navegador y pulsa “Instalar aplicación” o “Añadir a pantalla de inicio”.')};document.body.appendChild(b)}
   window.showDinoFollowList=showFollowListFixed;
-  function boot(){loadGames();installButton();wireCounters();setInterval(()=>{wireCounters();loadGames()},1500);new MutationObserver(()=>wireCounters()).observe(document.body,{childList:true,subtree:true});}
+  function boot(){loadGames();installButton();wireCounters();setInterval(()=>{wireCounters();loadGames()},1500);new MutationObserver(m=>{wireCounters();m.forEach(x=>x.addedNodes.forEach(n=>wireFollowButtons(n))}).observe(document.body,{childList:true,subtree:true});}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
