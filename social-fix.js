@@ -18,6 +18,16 @@
   window.addEventListener('appinstalled',()=>{installPrompt=null;window.__dinoInstallPrompt=null;$('dinoInstallButton')?.remove()});
   function installButton(){if(!$('app')||window.matchMedia?.('(display-mode: standalone)').matches||window.navigator.standalone)return;if($('dinoInstallButton'))return;const b=document.createElement('button');b.id='dinoInstallButton';b.type='button';b.innerHTML='<img src="/dinoramtix-icon.svg" style="width:34px;height:34px;border-radius:10px;vertical-align:middle;margin-right:8px">📲 Instalar DinoRamtix';b.style.cssText='position:fixed;right:16px;bottom:16px;z-index:99999;display:flex;align-items:center;border:0;border-radius:16px;padding:9px 13px;background:#fff;color:#111;font-weight:800;box-shadow:0 6px 24px rgba(0,0,0,.2);cursor:pointer';b.onclick=async()=>{if(installPrompt){installPrompt.prompt();try{await installPrompt.userChoice}catch(e){}installPrompt=null;window.__dinoInstallPrompt=null}else alert('Abre el menú ⋮ del navegador y pulsa “Instalar aplicación” o “Añadir a pantalla de inicio”.')};document.body.appendChild(b)}
   window.showDinoFollowList=showFollowListFixed;
-  function boot(){const app=$('app');if(!app)return;loadGames();installButton();wireCounters();const observer=new MutationObserver(m=>{if(app.classList.contains('hidden'))return;wireCounters();m.forEach(x=>x.addedNodes.forEach(n=>wireFollowButtons(n)))});observer.observe(app,{childList:true,subtree:true});setInterval(()=>{if(!app.classList.contains('hidden')){wireCounters();loadGames()}},2500)}
+  function boot(){
+    const auth=$('auth');
+    if(auth){auth.style.position='relative';auth.style.zIndex='100000';auth.style.pointerEvents='auto';auth.querySelectorAll('button,input,textarea,select,a').forEach(el=>el.style.pointerEvents='auto');}
+    const app=$('app');
+    if(!app)return;
+    app.classList.toggle('dino-auth-hidden',!!auth&&!auth.classList.contains('hidden'));
+    loadGames();installButton();wireCounters();
+    const observer=new MutationObserver(m=>{if(app.classList.contains('hidden'))return;wireCounters();m.forEach(x=>x.addedNodes.forEach(n=>wireFollowButtons(n)))});
+    observer.observe(app,{childList:true,subtree:true});
+    setInterval(()=>{if(!app.classList.contains('hidden')){wireCounters();loadGames()}},2500);
+  }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
