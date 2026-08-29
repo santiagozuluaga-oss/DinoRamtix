@@ -20,14 +20,16 @@
   window.showDinoFollowList=showFollowListFixed;
   function boot(){
     const auth=$('auth');
-    if(auth){auth.style.position='relative';auth.style.zIndex='100000';auth.style.pointerEvents='auto';auth.querySelectorAll('button,input,textarea,select,a').forEach(el=>el.style.pointerEvents='auto');}
+    if(auth){auth.style.position='relative';auth.style.zIndex='100000';auth.style.pointerEvents='auto';auth.style.touchAction='auto';auth.querySelectorAll('button,input,textarea,select,a').forEach(el=>{el.style.pointerEvents='auto';el.style.touchAction='manipulation';el.style.position='relative';el.style.zIndex='100001'});}
     const app=$('app');
     if(!app)return;
     app.classList.toggle('dino-auth-hidden',!!auth&&!auth.classList.contains('hidden'));
+    // Do not attach any social observers/listeners while authentication is visible.
+    if(auth&&!auth.classList.contains('hidden'))return;
     loadGames();installButton();wireCounters();
-    const observer=new MutationObserver(m=>{if(app.classList.contains('hidden'))return;wireCounters();m.forEach(x=>x.addedNodes.forEach(n=>wireFollowButtons(n)))});
+    const observer=new MutationObserver(m=>{if(app.classList.contains('hidden')||($('auth')&&!$('auth').classList.contains('hidden')))return;wireCounters();m.forEach(x=>x.addedNodes.forEach(n=>wireFollowButtons(n)))});
     observer.observe(app,{childList:true,subtree:true});
-    setInterval(()=>{if(!app.classList.contains('hidden')){wireCounters();loadGames()}},2500);
+    setInterval(()=>{if(!app.classList.contains('hidden')&&(!$('auth')||$('auth').classList.contains('hidden'))){wireCounters();loadGames()}},2500);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
