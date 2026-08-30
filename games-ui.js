@@ -1,148 +1,31 @@
-// DinoRamtix: MiniJuegos, comprar verificado, monedas y listas reales de seguidores
-(() => {
-  const db = window.supabase?.createClient?.(DINORAMTIX_CONFIG.supabaseUrl, DINORAMTIX_CONFIG.supabasePublishableKey);
-  const $ = id => document.getElementById(id);
-  const esc = x => String(x ?? '').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#039;'}[c]));
-  let gameTimer=null, gameScore=0, gameRunning=false;
-
-  async function currentUser() {
-    if (!db) return null;
-    return (await db.auth.getSession()).data.session?.user || null;
-  }
-
-  async function refreshCoins() {
-    const u = await currentUser();
-    const pill = $('dinoCoinsPill');
-    if (!pill) return;
-    if (!u) { pill.textContent = '🪙 0 monedas'; return; }
-    const r = await db.from('profiles').select('coins').eq('id', u.id).maybeSingle();
-    const coins = Number(r.data?.coins || 0);
-    pill.textContent = `🪙 ${coins.toLocaleString('es-CO')} ${coins === 1 ? 'moneda' : 'monedas'}`;
-  }
-
-  function addStyles(){
-    if($('dinoGamesStyles'))return;
-    const s=document.createElement('style');s.id='dinoGamesStyles';s.textContent=`
-      .dinoModal{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:1000;display:flex;align-items:center;justify-content:center;padding:14px}
-      .dinoSheet{width:min(760px,96vw);max-height:92vh;overflow:auto;background:#fff;border-radius:20px;padding:18px;color:#111}
-      .dinoGameGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-      .dinoGameCard{border:1px solid #ddd;border-radius:15px;padding:14px;text-align:left;background:#fafafa;cursor:pointer}
-      .dinoGameCard:hover{transform:translateY(-1px)}
-      .dinoPlay{min-height:280px;border:2px dashed #ccd0d5;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:15px;position:relative;overflow:hidden;background:#f7f9fb}
-      .dinoTarget{position:absolute;border-radius:50%;font-size:28px;width:64px;height:64px;padding:0}
-      .dinoBig{font-size:56px;font-weight:800}
-      .dinoList{display:grid;gap:8px;max-height:55vh;overflow:auto}
-      .dinoUser{display:flex;align-items:center;gap:10px;border:1px solid #e1e4e8;border-radius:12px;padding:9px}
-      .dinoUser img{width:44px;height:44px;border-radius:50%;object-fit:cover}.dinoUserAvatar{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:#e9edf1;font-weight:700}
-      .dinoCountLink{cursor:pointer;text-decoration:underline;text-underline-offset:3px}
-      @media(max-width:650px){.dinoGameGrid{grid-template-columns:1fr}.dinoSheet{padding:12px}}
-    `;document.head.appendChild(s);
-  }
-
-  function modal(id,html){addStyles();let m=$(id);if(!m){m=document.createElement('div');m.id=id;m.className='dinoModal';document.body.appendChild(m)}m.innerHTML=`<div class="dinoSheet">${html}</div>`;m.classList.remove('hidden');m.onclick=e=>{if(e.target===m)m.classList.add('hidden')}}
-  function closeModal(id){$(id)?.classList.add('hidden')}
-
-  function fastNotice(message){
-    let n=$('dinoFastNotice');
-    if(!n){
-      n=document.createElement('div'); n.id='dinoFastNotice';
-      n.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:100000;background:#111;color:#fff;padding:13px 18px;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.3);font-weight:700;text-align:center;max-width:min(90vw,520px);transition:opacity .18s ease';
-      document.body.appendChild(n);
-    }
-    n.textContent=message; n.style.opacity='1'; clearTimeout(window.__dinoNoticeTimer);
-    window.__dinoNoticeTimer=setTimeout(()=>{n.style.opacity='0'},2600);
-  }
-
-  async function buyVerified() {
-    const u = await currentUser();
-    if (!u) return fastNotice('Inicia sesión para comprar el verificado.');
-    const r = await db.from('profiles').select('coins,verified').eq('id', u.id).maybeSingle();
-    const coins = Number(r.data?.coins || 0);
-    if (r.data?.verified) return fastNotice('Tu cuenta ya está verificada 🟦✓');
-    if (coins < 7000000) return fastNotice(`Necesitas 7.000.000 🪙. Tienes ${coins.toLocaleString('es-CO')} 🪙.`);
-    if (!confirm('¿Comprar la insignia de verificado por 7.000.000 🪙?')) return;
-    const q = await db.rpc('buy_verified_with_coins');
-    if (q.error) return fastNotice(q.error.message);
-    fastNotice('¡Listo! Tu cuenta ahora está verificada 🟦✓');
-    refreshCoins();
-    if (typeof window.my === 'function') window.my();
-  }
-
-  function gameMenu(){
-    modal('dinoGamesModal',`<button class="g" onclick="window.closeDinoGames()">✕ Cerrar</button><h2>🎮 MiniJuegos</h2><p class="muted">Sin límite de tiempo. Termina cuando quieras. Tu puntuación se convierte en la misma cantidad de 🪙 monedas.</p><div class="dinoGameGrid">
-      <button class="dinoGameCard" onclick="window.startDinoTap()"><b>🦖 Dino Tap</b><br><span class="muted">Toca el dinosaurio tantas veces como quieras.</span></button>
-      <button class="dinoGameCard" onclick="window.startMathGame()"><b>🧠 Reto Matemático</b><br><span class="muted">Resuelve operaciones y suma puntos.</span></button>
-      <button class="dinoGameCard" onclick="window.startTargetGame()"><b>🎯 Caza el objetivo</b><br><span class="muted">Acierta al objetivo para sumar puntos.</span></button>
-    </div>`)
-  }
-
-  function gameShell(title,body){
-    modal('dinoGameModal',`<div class="row"><button class="g" onclick="window.stopDinoGame()">← Juegos</button><div class="grow"><h2 style="margin:0">${title}</h2></div><b id="gameScore">0 puntos</b></div><div style="margin-top:14px">${body}</div>`);
-    gameRunning=true;gameScore=0;
-  }
-  async function finishGame(game){
-    if(!gameRunning)return;gameRunning=false;clearInterval(gameTimer);gameTimer=null;
-    const u=await currentUser();if(!u){fastNotice('Inicia sesión para guardar las monedas.');return}
-    const score=Math.max(0,Math.floor(gameScore));
-    const r=await db.rpc('add_game_coins',{p_game:game,p_score:score});
-    if(r.error){fastNotice(r.error.message);return}
-    const earned=Number(r.data||score);
-    // Mostrar la confirmación sin esperar otra consulta de Supabase.
-    fastNotice(`🎉 ¡Partida terminada! +${earned.toLocaleString('es-CO')} 🪙 monedas`);
-    refreshCoins();
-    setTimeout(gameMenu,120);
-  }
-  function setScore(n){gameScore=n;const el=$('gameScore');if(el)el.textContent=`${n} puntos`}
-  function stopDinoGame(){gameRunning=false;clearInterval(gameTimer);gameTimer=null;closeModal('dinoGameModal');gameMenu()}
-  function startDinoTap(){gameShell('🦖 Dino Tap',`<div class="dinoPlay"><div class="dinoBig">${gameScore}</div><button style="font-size:70px;padding:12px" onclick="window.tapDino()">🦖</button><button class="p" onclick="window.finishDinoTap()">Terminar y cobrar 🪙</button></div>`)}
-  function tapDino(){if(!gameRunning)return;setScore(gameScore+1)}
-  function finishDinoTap(){finishGame('dino_tap')}
-  function newMath(){const a=Math.floor(Math.random()*20)+1,b=Math.floor(Math.random()*20)+1,ops=['+','-','×'],op=ops[Math.floor(Math.random()*ops.length)];let ans=op==='+'?a+b:op==='-'?a-b:a*b;$('mathQuestion').textContent=`${a} ${op} ${b} = ?`;$('mathAnswer').value='';$('mathAnswer').focus();window.mathAnswer=ans}
-  function startMathGame(){gameShell('🧠 Reto Matemático',`<div class="dinoPlay"><h2 id="mathQuestion"></h2><input id="mathAnswer" type="number" style="max-width:260px" placeholder="Respuesta" onkeydown="if(event.key==='Enter')window.checkMath()"><button class="p" onclick="window.checkMath()">Comprobar</button><p id="mathResult" class="muted"></p><button class="g" onclick="window.finishMathGame()">Terminar y cobrar 🪙</button></div>`);newMath()}
-  function checkMath(){if(!gameRunning)return;const v=Number($('mathAnswer').value);if(v===window.mathAnswer){setScore(gameScore+100);$('mathResult').textContent='✅ Correcto +100';setTimeout(newMath,250)}else{$('mathResult').textContent='❌ Incorrecto, intenta otra vez'}}
-  function finishMathGame(){finishGame('reto_matematico')}
-  function moveTarget(){const area=$('targetArea'),t=$('targetButton');if(!area||!t)return;const maxX=Math.max(0,area.clientWidth-70),maxY=Math.max(0,area.clientHeight-70);t.style.left=Math.floor(Math.random()*maxX)+'px';t.style.top=Math.floor(Math.random()*maxY)+'px'}
-  function startTargetGame(){gameShell('🎯 Caza el objetivo',`<div id="targetArea" class="dinoPlay"><button id="targetButton" class="dinoTarget p" onclick="window.hitTarget()">🎯</button><button class="g" onclick="window.finishTargetGame()">Terminar y cobrar 🪙</button></div>`);moveTarget()}
-  function hitTarget(){if(!gameRunning)return;setScore(gameScore+10);moveTarget()}
-
-  function profileIdFromBox(box){
-    if(!box)return null;
-    const h=box.innerHTML||'';
-    const patterns=[/toggleFollow\(['\"]([0-9a-f-]{36})/i,/followUser\(['\"]([0-9a-f-]{36})/i,/unfollowUser\(['\"]([0-9a-f-]{36})/i,/profile\(['\"]([0-9a-f-]{36})/i,/data-user-id=["']([0-9a-f-]{36})/i];
-    for(const r of patterns){const m=h.match(r);if(m)return m[1]}
-    return null;
-  }
-  async function showFollowList(uid,type){
-    if(!uid)return fastNotice('No se pudo identificar este perfil.');
-    const col=type==='followers'?'follower_id':'following_id';
-    const rel=type==='followers'?'profiles!follows_follower_id_fkey':'profiles!follows_following_id_fkey';
-    const title=type==='followers'?'👥 Seguidores':'➡️ Siguiendo';
-    const r=await db.from('follows').select(`${col}, ${rel}(id,username,avatar_url,verified)`).eq(type==='followers'?'following_id':'follower_id',uid).order('created_at',{ascending:false});
-    if(r.error)return fastNotice(r.error.message);
-    const users=(r.data||[]).map(x=>x[rel]);
-    const unique=[];const seen=new Set();for(const u of users){if(u&&!seen.has(u.id)){seen.add(u.id);unique.push(u)}}
-    const rows=unique.map(u=>`<div class="dinoUser"><div>${u.avatar_url?`<img src="${esc(u.avatar_url)}">`:`<div class="dinoUserAvatar">${esc((u.username||'?')[0].toUpperCase())}</div>`}</div><div class="grow"><b>@${esc(u.username||'Usuario')}</b>${u.verified?' 🟦✓':''}</div><button class="p" onclick="window.profile('${u.id}');window.closeFollowList()">Ver perfil</button></div>`).join('');
-    modal('dinoFollowModal',`<div class="row"><button class="g" onclick="window.closeFollowList()">←</button><h2 style="margin:0">${title}</h2></div><p class="muted">${unique.length} ${type==='followers'?'personas te siguen':'personas sigue este usuario'}</p><div class="dinoList">${rows||'<p class="muted">Todavía no hay usuarios aquí.</p>'}</div>`)
-  }
-  function closeFollowList(){closeModal('dinoFollowModal')}
-  function wireFollowCounters(){
-    ['meBox','profileBox'].forEach(id=>{const box=$(id);if(!box)return;const uid=id==='meBox'?null:profileIdFromBox(box);box.querySelectorAll('button,span,b,strong,div').forEach(el=>{
-      if(el.dataset.followWired)return;const txt=(el.textContent||'').trim().toLowerCase();let type=txt.includes('seguidores')?'followers':(txt.includes('siguiendo')?'following':null);if(!type)return;
-      const owner=uid||null;if(id==='profileBox'&&!owner)return;el.dataset.followWired='1';el.classList.add('dinoCountLink');el.title=type==='followers'?'Ver quién sigue a este usuario':'Ver a quién sigue este usuario';el.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();if(id==='meBox'){currentUser().then(u=>u&&showFollowList(u.id,type))}else showFollowList(owner,type)},true);
-    })})
-  }
-
-  function addControls() {
-    const app = $('app'); const tabs = document.querySelector('#app>.tabs'); if (!app || !tabs) return;
-    addStyles();
-    if (!$('dinoGamesTab')) {const b=document.createElement('button');b.id='dinoGamesTab';b.className='g';b.textContent='🎮 MiniJuegos';b.onclick=()=>gameMenu();tabs.appendChild(b)}
-    if (!$('dinoVerifiedTab')) {const b=document.createElement('button');b.id='dinoVerifiedTab';b.className='g';b.textContent='🟦 Comprar verificado';b.onclick=buyVerified;tabs.appendChild(b)}
-    if (!$('dinoCoinsPill')) {const p=document.createElement('span');p.id='dinoCoinsPill';p.className='pill';p.style.cssText='font-weight:700;display:inline-flex;align-items:center;justify-content:center;min-width:130px;';p.textContent='🪙 0 monedas';tabs.appendChild(p)}
-    refreshCoins();wireFollowCounters();
-  }
-
-  window.openDinoGames=gameMenu;window.closeDinoGames=()=>closeModal('dinoGamesModal');window.startDinoTap=startDinoTap;window.tapDino=tapDino;window.finishDinoTap=finishDinoTap;window.startMathGame=startMathGame;window.checkMath=checkMath;window.finishMathGame=finishMathGame;window.startTargetGame=startTargetGame;window.hitTarget=hitTarget;window.finishTargetGame=finishGame;window.stopDinoGame=stopDinoGame;window.buyDinoVerified=buyVerified;window.closeFollowList=closeFollowList;window.showDinoFollowList=showFollowList;
-  window.refreshDinoCoins=refreshCoins;
-  function boot(){addControls();setInterval(()=>{addControls();wireFollowCounters()},5000);new MutationObserver(()=>{addControls();wireFollowCounters()}).observe(document.body,{childList:true,subtree:true})}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+// DinoRamtix MiniJuegos 2.0: 50.120+ procedural variants, coins and verified purchase
+(()=>{
+ const db=window.supabase?.createClient?.(DINORAMTIX_CONFIG.supabaseUrl,DINORAMTIX_CONFIG.supabasePublishableKey),$=id=>document.getElementById(id),esc=x=>String(x??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#039;'}[c]));
+ let score=0,running=false,variant=null;
+ const types=[['🦖','Dino Tap','Toca para sumar puntos','tap'],['🧠','Reto Matemático','Resuelve operaciones','math'],['🎯','Caza el objetivo','Pulsa el objetivo','target'],['⚡','Reflejos','Pulsa el botón','tap'],['🔢','Números','Adivina y suma puntos','tap'],['🌈','Colores','Elige y suma puntos','tap'],['🧩','Memoria','Encuentra la opción','tap'],['🔤','Palabras','Completa el reto','tap'],['⭐','Estrellas','Atrapa estrellas','tap'],['🚀','Galaxia','Pulsa para ganar puntos','tap']];
+ const prefixes=['Turbo','Ultra','Mega','Neon','Cosmic','Pixel','Dino','Galaxy','Jungle','Retro','Hyper','Rainbow','Golden','Mystic','Volcano','Ocean','Robot','Space','Frost','Fire'];
+ const catalog=Array.from({length:50120},(_,i)=>{const t=types[i%types.length];return{id:i+1,icon:t[0],name:`${prefixes[i%prefixes.length]} ${t[1]} #${i+1}`,desc:t[2],type:t[3],seed:i+1}});
+ function style(){if($('dinoGamesStyles2'))return;let s=document.createElement('style');s.id='dinoGamesStyles2';s.textContent=`.dinoModal{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:10000;display:flex;align-items:center;justify-content:center;padding:12px}.dinoSheet{width:min(820px,96vw);max-height:94vh;overflow:auto;background:#fff;color:#111;border-radius:22px;padding:18px}.dinoGameGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.dinoGameCard{border:1px solid #ddd;border-radius:15px;padding:14px;text-align:left;background:#fafafa;cursor:pointer}.dinoPlay{min-height:310px;border:2px dashed #ccd0d5;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;position:relative;overflow:hidden;background:#f7f9fb}.dinoBig{font-size:56px;font-weight:800}.dinoTarget{position:absolute;width:66px;height:66px;padding:0;border-radius:50%}@media(max-width:650px){.dinoGameGrid{grid-template-columns:1fr 1fr}.dinoSheet{padding:12px}}`;document.head.appendChild(s)}
+ function modal(id,html){style();let m=$(id);if(!m){m=document.createElement('div');m.id=id;m.className='dinoModal';document.body.appendChild(m)}m.innerHTML=`<div class="dinoSheet">${html}</div>`;m.classList.remove('hidden');m.onclick=e=>{if(e.target===m)m.classList.add('hidden')}}
+ const close=id=>$(id)?.classList.add('hidden');
+ async function user(){return db?(await db.auth.getSession()).data.session?.user:null}
+ async function coins(){let u=await user(),p=$('dinoCoinsPill');if(!p)return;if(!u){p.textContent='🪙 0 monedas';return}let r=await db.from('profiles').select('coins').eq('id',u.id).maybeSingle(),n=Number(r.data?.coins||0);p.textContent=`🪙 ${n.toLocaleString('es-CO')} ${n===1?'moneda':'monedas'}`}
+ function notice(t){window.__dinoFastNotice?window.__dinoFastNotice(t):alert(t)}
+ async function buyVerified(){let u=await user();if(!u)return notice('Inicia sesión para comprar el verificado.');let r=await db.from('profiles').select('coins,verified').eq('id',u.id).maybeSingle(),n=Number(r.data?.coins||0);if(r.data?.verified)return notice('Tu cuenta ya está verificada 🟦✓');if(n<7000000)return notice(`Necesitas 7.000.000 🪙. Tienes ${n.toLocaleString('es-CO')} 🪙.`);if(!confirm('¿Comprar el verificado por 7.000.000 🪙?'))return;let q=await db.rpc('buy_verified_with_coins');if(q.error)return notice(q.error.message);notice('¡Verificado comprado! 🟦✓');coins();window.my?.()}
+ function menu(){modal('dinoGamesModal',`<div class="row"><div class="grow"><h2 style="margin:0">🎮 MiniJuegos</h2><p class="muted">50.120 variantes sin límite de tiempo. Termina cuando quieras.</p></div><button class="g" onclick="window.closeDinoGames()">✕</button></div><div class="dinoGameGrid">${types.slice(0,6).map((t,i)=>`<button class="dinoGameCard" onclick="window.startDinoVariant(${i},${Math.floor(Math.random()*50000)+1})"><b>${t[0]} ${t[1]}</b><br><span class="muted">${t[2]}</span></button>`).join('')}</div><button class="p" style="width:100%;margin-top:12px" onclick="window.openDinoCatalog()">🎲 Ver catálogo de 50.120 juegos</button>`)}
+ function shell(g){variant=g;score=0;running=true;modal('dinoGameModal',`<div class="row"><button class="g" onclick="window.stopDinoGame()">← Juegos</button><div class="grow"><h2 style="margin:0">${esc(g.icon+' '+g.name)}</h2></div><b id="gameScore">0 puntos</b></div><div id="gameBody" style="margin-top:14px"></div>`);return $('gameBody')}
+ function set(n){score=n;let e=$('gameScore');if(e)e.textContent=`${n} puntos`;let s=$('vScore');if(s)s.textContent=n}
+ function start(g){const b=shell(g);if(g.type==='tap')b.innerHTML=`<div class="dinoPlay"><div class="dinoBig" id="vScore">0</div><button id="vTap" style="font-size:72px;padding:12px">${g.icon}</button><button class="p" id="vFinish">Terminar y cobrar 🪙</button></div>`;else if(g.type==='math')b.innerHTML=`<div class="dinoPlay"><h2 id="vQ"></h2><input id="vA" type="number" placeholder="Respuesta" style="max-width:260px"><button class="p" id="vCheck">Comprobar</button><p id="vR" class="muted"></p><button class="g" id="vFinish">Terminar y cobrar 🪙</button></div>`;else if(g.type==='target')b.innerHTML=`<div id="vArea" class="dinoPlay"><button id="vTarget" class="p dinoTarget">🎯</button><button class="g" id="vFinish">Terminar y cobrar 🪙</button></div>`;else b.innerHTML=`<div class="dinoPlay"><div class="dinoBig">${g.icon}</div><p>Pulsa para sumar puntos.</p><button class="p" id="vTap">${['⭐','🚀','🦖','🎯','🍕'][g.seed%5]}</button><button class="g" id="vFinish">Terminar y cobrar 🪙</button></div>`;
+  $('vFinish').onclick=finish;const tap=$('vTap');if(tap)tap.onclick=()=>{if(running)set(score+1)};
+  if(g.type==='math'){const next=()=>{let a=(g.seed+score*3)%30+1,b=(g.seed+score*7)%20+1;window.__dinoAns=a+b;$('vQ').textContent=`${a} + ${b} = ?`;$('vA').value='';$('vA').focus()};$('vCheck').onclick=()=>{if(Number($('vA').value)===window.__dinoAns){set(score+100);$('vR').textContent='✅ Correcto +100';next()}else $('vR').textContent='❌ Intenta otra vez'};next()}
+  if(g.type==='target'){const move=()=>{let a=$('vArea'),t=$('vTarget');if(!a||!t)return;t.style.left=Math.max(0,Math.random()*(a.clientWidth-70))+'px';t.style.top=Math.max(0,Math.random()*(a.clientHeight-70))+'px'};$('vTarget').onclick=()=>{set(score+10);move()};setTimeout(move,20)}
+ }
+ async function finish(){if(!running)return;running=false;const g=variant,points=Math.max(0,Math.floor(score)),u=await user();if(!u)return notice('Inicia sesión para guardar las monedas.');let r=await db.rpc('add_game_coins',{p_game:(g?.name||'variant').slice(0,80),p_score:points});if(r.error)return notice(r.error.message);let earned=Number(r.data??points);notice(`🎉 +${earned.toLocaleString('es-CO')} 🪙 monedas`);coins();setTimeout(menu,120)}
+ function stop(){running=false;close('dinoGameModal');menu()}
+ function catalogModal(){modal('dinoCatalogModal',`<div class="row"><div class="grow"><h2 style="margin:0">🎲 50.120 MiniJuegos</h2><p class="muted">Variantes generadas a partir de mecánicas reutilizables.</p></div><button class="g" onclick="document.getElementById('dinoCatalogModal').classList.add('hidden')">✕</button></div><input id="dinoCatalogSearch" placeholder="🔎 Buscar juego..." oninput="window.filterDinoCatalog(this.value)"><div id="dinoCatalogGrid" class="dinoGameGrid"></div>`);window.__dinoCatalogRender=()=>{let q=($('dinoCatalogSearch')?.value||'').toLowerCase(),list=(q?catalog.filter(g=>(g.name+' '+g.desc).toLowerCase().includes(q)):catalog).slice(0,60);$('dinoCatalogGrid').innerHTML=list.map(g=>`<button class="dinoGameCard" onclick="window.startDinoVariantById(${g.id})"><b>${g.icon} ${esc(g.name)}</b><br><span class="muted">${esc(g.desc)}</span></button>`).join('')};window.__dinoCatalogRender()}
+ function filterCatalog(v){if($('dinoCatalogSearch'))$('dinoCatalogSearch').value=v;window.__dinoCatalogRender?.()}
+ function startById(id){const g=catalog.find(x=>x.id===Number(id));if(g)start(g)}
+ window.openDinoGames=menu;window.closeDinoGames=()=>close('dinoGamesModal');window.startDinoVariant=(i,seed)=>{const t=types[i%types.length];start({id:seed,icon:t[0],name:`${prefixes[seed%prefixes.length]} ${t[1]} #${seed}`,desc:t[2],type:t[3],seed})};window.startDinoVariantById=startById;window.openDinoCatalog=catalogModal;window.filterDinoCatalog=filterCatalog;window.startDinoTap=()=>window.startDinoVariant(0,1);window.tapDino=()=>$('vTap')?.click();window.finishDinoTap=finish;window.startMathGame=()=>window.startDinoVariant(1,2);window.checkMath=()=>$('vCheck')?.click();window.finishMathGame=finish;window.startTargetGame=()=>window.startDinoVariant(2,3);window.hitTarget=()=>$('vTarget')?.click();window.finishTargetGame=finish;window.stopDinoGame=stop;window.buyDinoVerified=buyVerified;window.refreshDinoCoins=coins;
+ function addButtons(){const tabs=document.querySelector('#app>.tabs');if(!tabs)return;if(!$('dinoGamesTab')){let b=document.createElement('button');b.id='dinoGamesTab';b.className='g';b.textContent='🎮 MiniJuegos';b.onclick=menu;tabs.appendChild(b)}if(!$('dinoVerifiedTab')){let b=document.createElement('button');b.id='dinoVerifiedTab';b.className='g';b.textContent='🟦 Comprar verificado';b.onclick=buyVerified;tabs.appendChild(b)}if(!$('dinoCoinsPill')){let p=document.createElement('span');p.id='dinoCoinsPill';p.className='pill';p.textContent='🪙 0 monedas';p.style.fontWeight='700';tabs.appendChild(p)}coins()}
+ function boot(){addButtons();if(!document.getElementById('dinoPolishRuntime')){let s=document.createElement('script');s.id='dinoPolishRuntime';s.src='./polish.js?v=20260829';s.defer=true;document.head.appendChild(s)}setInterval(addButtons,4000)}boot();
 })();
