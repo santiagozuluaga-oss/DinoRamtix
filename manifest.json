@@ -1,16 +1,12 @@
 {
-  "name": "DinoRamtix",
-  "short_name": "DinoRamtix",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#0095f6",
-  "icons": [
-    {
-      "src": "/dinoramtix-icon.svg",
-      "sizes": "512x512",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    }
-  ]
+  "name":"DinoRamtix",
+  "short_name":"DinoRamtix",
+  "description":"La red social futurista de DinoRamtix",
+  "start_url":"/",
+  "scope":"/",
+  "display":"standalone",
+  "orientation":"portrait-primary",
+  "background_color":"#030611",
+  "theme_color":"#030611",
+  "icons":[{"src":"/icon.svg?v=20260830","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
 }
