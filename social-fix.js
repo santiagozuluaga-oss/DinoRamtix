@@ -24,12 +24,13 @@
     const app=$('app');
     if(!app)return;
     app.classList.toggle('dino-auth-hidden',!!auth&&!auth.classList.contains('hidden'));
-    // Do not attach any social observers/listeners while authentication is visible.
     if(auth&&!auth.classList.contains('hidden'))return;
     loadGames();installButton();wireCounters();
     const observer=new MutationObserver(m=>{if(app.classList.contains('hidden')||($('auth')&&!$('auth').classList.contains('hidden')))return;wireCounters();m.forEach(x=>x.addedNodes.forEach(n=>wireFollowButtons(n)))});
     observer.observe(app,{childList:true,subtree:true});
     setInterval(()=>{if(!app.classList.contains('hidden')&&(!$('auth')||$('auth').classList.contains('hidden'))){wireCounters();loadGames()}},2500);
+    // Load the active feed after index.html has defined its legacy feed(), so the patch wins.
+    if(!document.getElementById('dinoFeedReelsFix')){const s=document.createElement('script');s.id='dinoFeedReelsFix';s.src='./feed-reels-fix.js?v=20260901';s.defer=true;document.head.appendChild(s)}
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
