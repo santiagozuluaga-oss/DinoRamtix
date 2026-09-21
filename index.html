@@ -56,4 +56,4 @@ async function reel(){if(guestMode)return alert('Inicia sesión');let f=$('reelF
 async function likeReel(id){if(guestMode)return alert('Inicia sesión para reaccionar');let{data}=await db.from('reel_likes').select('reel_id').eq('reel_id',id).eq('user_id',me.id).maybeSingle();let r=data?await db.from('reel_likes').delete().eq('reel_id',id).eq('user_id',me.id):await db.from('reel_likes').insert({reel_id:id,user_id:me.id});if(r.error)return alert(r.error.message);reels()}
 function logout(){db.auth.signOut();me=null;guestMode=false;$('app').classList.add('hidden');$('auth').classList.remove('hidden')}
 (async()=>{let{s}=await db.auth.getSession();if(s?.session){me=s.session.user;start()}})();
-</script></body></html>
+</script><script src="./dinoramtix-2.js"></script></body></html>
